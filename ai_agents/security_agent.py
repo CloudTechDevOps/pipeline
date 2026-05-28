@@ -11,6 +11,7 @@ secret_patterns = [
     r"(?i)\btoken\b\s*[:=]\s*['\"][^'\"]{8,}['\"]",
     r"(?i)\bapi[_-]?key\b\s*[:=]\s*['\"][^'\"]{8,}['\"]",
     r"(?i)\bmail\b\s*[:=]\s*['\"][^'\"]+@[^'\"]+['\"]",
+    r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b",
 ]
 
 scan_extensions = {".py", ".html", ".css", ".js", ".json", ".yml", ".yaml", ".env"}
