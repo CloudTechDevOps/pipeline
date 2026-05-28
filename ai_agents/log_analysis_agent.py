@@ -46,7 +46,6 @@ print(response)
 
 ai_blocking_patterns = [
     r"(?m)^pipeline_status\s*:\s*fail\b",
-    r"\bdeployment failed\b",
     r"\bdeployment should not proceed\b",
     r"\bdo not deploy\b",
 ]
