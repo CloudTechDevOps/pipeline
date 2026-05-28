@@ -1,5 +1,3 @@
-
-import re
 from agent_guard import fail_if_matches
 from ai_provider import ask_ai
 
@@ -9,31 +7,33 @@ with open("app.py", "r", encoding="utf-8") as f:
     code = f.read()
 
 prompt = f"""
-You are a DevSecOps reviewer.
+Review this Flask website code.
 
-IMPORTANT RULES:
-- Only mark FAIL if a REAL, CONFIRMED, EXPLOITABLE vulnerability exists.
-- Do NOT mark FAIL for mentions, examples, or explanations.
-- Do NOT mark FAIL for generic security advice.
+Check:
+- security issues
+- coding standards
+- performance problems
+- deployment risks
 
-Return EXACT format:
-
+Return this exact gate line:
 PIPELINE_STATUS: PASS or FAIL
-Risk: LOW/MEDIUM/HIGH/CRITICAL
-Finding: <only if real issue exists else "NONE">
+
+Use FAIL only for a critical/high-risk issue that should block deployment.
 
 Code:
 {code}
 """
 
 response = ask_ai(prompt)
+
 print(response)
 
-# ONLY trust explicit FAIL line
-strict_fail_pattern = r"(?m)^PIPELINE_STATUS:\s*FAIL\s*$"
+blocking_patterns = [
+    r"(?m)^pipeline_status\s*:\s*fail\b",
+    r"risk level\s*:\s*(high|critical)",
+    r"severity\s*:\s*(high|critical)",
+    r"\bdeployment should not proceed\b",
+    r"\bdo not deploy\b",
+]
 
-if re.search(strict_fail_pattern, response):
-    fail_if_matches("AI Code Review Agent", response, [strict_fail_pattern])
-else:
-    print("✅ Pipeline passed (no confirmed critical issues)")
-
+fail_if_matches("AI Code Review Agent", response, blocking_patterns)

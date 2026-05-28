@@ -26,6 +26,8 @@ print(response)
 
 blocking_patterns = [
     r"(?m)^pipeline_status\s*:\s*fail\b",
+    r"risk level\s*:\s*high",
+    r"risk level\s*:\s*critical",
     r"\bdowntime likely\b",
     r"\bdeployment should not proceed\b",
     r"\bdo not deploy\b",
