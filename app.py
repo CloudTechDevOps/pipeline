@@ -15,7 +15,7 @@ def about():
 def contact():
     return render_template("contact.html")
 
-@app.route("/healthh")
+@app.route("/health")
 def health():
     return jsonify({
         "status": "healthy",
