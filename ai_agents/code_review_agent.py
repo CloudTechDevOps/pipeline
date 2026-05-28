@@ -1,4 +1,4 @@
-```python id="fix1"
+
 import re
 from agent_guard import fail_if_matches
 from ai_provider import ask_ai
@@ -36,4 +36,4 @@ if re.search(strict_fail_pattern, response):
     fail_if_matches("AI Code Review Agent", response, [strict_fail_pattern])
 else:
     print("✅ Pipeline passed (no confirmed critical issues)")
-```
+
