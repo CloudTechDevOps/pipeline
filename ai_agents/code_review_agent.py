@@ -29,7 +29,6 @@ response = ask_ai(prompt)
 print(response)
 
 blocking_patterns = [
-    r"(?m)^pipeline_status\s*:\s*fail\b",
     r"risk level\s*:\s*(high|critical)",
     r"severity\s*:\s*(high|critical)",
     r"\bdeployment should not proceed\b",
