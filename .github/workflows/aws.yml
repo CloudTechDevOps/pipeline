@@ -118,27 +118,29 @@ jobs:
     - name: 🔁 Rollback on Failure
       if: failure()
       run: |
-        ssh -tt ec2-user@${{ secrets.EC2_HOST }} 
-
+        ssh -o StrictHostKeyChecking=no -tt ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+    
           echo "❌ Deployment failed. Rolling back..."
-
+    
           rm -rf ~/website
-
+    
           cp -r ~/website-backup ~/website
-
+    
           PID=$(lsof -t -i:5000)
-
+    
           if [ ! -z "$PID" ]; then
             kill -9 $PID
           fi
-
+    
           cd ~/website
-
+    
           nohup python3 app.py > output.log 2>&1 < /dev/null &
-
+    
           sleep 10
-
-          curl --fail http://${{ secrets.EC2_HOST }}:5000/health \
+    
+          curl --fail http://localhost:5000/health \
             && echo "✅ Rollback successful!" \
             || echo "❌ Rollback failed!"
-        
+    
+        EOF
+    
