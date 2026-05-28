@@ -1,11 +1,10 @@
-
 name: 🚀 AI Website Deployment Pipeline
 
 on:
-  push: 
+  push:
     branches:
       - main
-  
+
 env:
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
   GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -45,14 +44,7 @@ jobs:
       run: |
         python ai_agents/deployment_risk_agent.py
 
-    - name: 🧰 Backup Existing Website
-      run: |
-        ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} '
-          rm -rf ~/website-backup
-          cp -r ~/website ~/website-backup || true
-        '
-
-    - name: 🚚 Upload Website
+    - name: 🚚 Upload Website to EC2
       run: |
         ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} "
           mkdir -p ~/website
@@ -63,21 +55,16 @@ jobs:
 
     - name: 🐍 Install Requirements on EC2
       run: |
-        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
-          sudo yum install -y python3 git 
-
-          sudo yum install python3-pip -y
-
+        ssh ec2-user@${{ secrets.EC2_HOST }} '
+          sudo yum install -y python3 python3-pip git
           cd ~/website
-
           pip3 install -r requirements.txt
         '
 
-    - name: 🛑 Stop Existing Website
+    - name: 🛑 Stop Existing App
       run: |
-        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
-          PID=$(lsof -t -i:5000)
-
+        ssh ec2-user@${{ secrets.EC2_HOST }} '
+          PID=$(lsof -t -i:5000 || true)
           if [ ! -z "$PID" ]; then
             kill -9 $PID
           fi
@@ -85,24 +72,19 @@ jobs:
 
     - name: 🚀 Start Website
       run: |
-        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
+        ssh ec2-user@${{ secrets.EC2_HOST }} '
           cd ~/website
-
           nohup python3 app.py > output.log 2>&1 < /dev/null &
-
           sleep 10
-
           tail -n 20 output.log
         '
 
     - name: 📄 AI Log Analysis Agent
       run: |
-        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
+        ssh ec2-user@${{ secrets.EC2_HOST }} '
           cd ~/website
-
           export GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
           export GROQ_API_KEY="${{ secrets.GROQ_API_KEY }}"
-
           python3 ai_agents/log_analysis_agent.py
         '
 
@@ -110,47 +92,58 @@ jobs:
       run: |
         curl --fail http://${{ secrets.EC2_HOST }}:5000/health
 
+    # ---------------- SUCCESS: SAVE STABLE VERSION ----------------
+
+    - name: 🏷️ Update Last Stable Deployment Tag
+      if: success()
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+
+        git tag -f prod-stable $GITHUB_SHA
+        git push origin prod-stable --force
+
     - name: ✅ Deployment Success
       if: success()
       run: |
-        echo "✅ Website deployed successfully!"
+        echo "🚀 Deployment successful!"
 
-    - name: 🔁 Rollback on Failure
+    # ---------------- FAILURE: ROLLBACK ----------------
+
+    - name: 🔁 Rollback to Last Stable Version (Git-based)
       if: failure()
       run: |
         ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
-    
-          echo "❌ Deployment failed. Rolling back..."
-    
-          rm -rf ~/website
-          cp -r ~/website-backup ~/website
-    
-          PID=$(lsof -t -i:5000)
-    
+
+          echo "❌ Deployment failed. Rolling back to last stable version..."
+
+          cd ~/website
+
+          git fetch --tags origin
+
+          echo "⬇️ Checking out prod-stable..."
+          git checkout prod-stable
+
+          PID=$(lsof -t -i:5000 || true)
           if [ ! -z "$PID" ]; then
             kill -9 $PID
           fi
-    
-          cd ~/website
-    
+
           nohup python3 app.py > output.log 2>&1 < /dev/null &
-    
+
           sleep 10
-    
-          # ❗ Do NOT fail rollback on health check
+
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health)
-    
+
           if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Rollback successful!"
+            echo "✅ Rollback successful"
           else
-            echo "⚠️ Rollback completed but health check returned $HTTP_CODE (ignored)"
+            echo "⚠️ Rollback completed but health check failed: $HTTP_CODE"
           fi
-    
+
         EOF
-    
-    - name: ✅ Rollback Completed
+
+    - name: 📌 Rollback Completed
       if: failure()
       run: |
-        echo "Application restored successfully"
-
-    
+        echo "🔁 System restored to last stable version"
