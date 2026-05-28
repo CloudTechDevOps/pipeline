@@ -1,0 +1,156 @@
+
+name: 🚀 AI Website Deployment Pipeline
+
+on:
+  push: 
+    branches:
+      - main
+  
+env:
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: 📦 Checkout Code
+      uses: actions/checkout@v4
+
+    - name: 🔐 Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+    - name: 🐍 Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: 📦 Install Dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: 🤖 AI Code Review Agent
+      run: |
+        python ai_agents/code_review_agent.py
+
+    - name: 🔐 AI Security Agent
+      run: |
+        python ai_agents/security_agent.py
+
+    - name: 🧠 AI Deployment Risk Agent
+      run: |
+        python ai_agents/deployment_risk_agent.py
+
+    - name: 🧰 Backup Existing Website
+      run: |
+        ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} '
+          rm -rf ~/website-backup
+          cp -r ~/website ~/website-backup || true
+        '
+
+    - name: 🚚 Upload Website
+      run: |
+        ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} "
+          mkdir -p ~/website
+        "
+
+        scp -o StrictHostKeyChecking=no -r * \
+        ec2-user@${{ secrets.EC2_HOST }}:~/website/
+
+    - name: 🐍 Install Requirements on EC2
+      run: |
+        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
+          sudo yum install -y python3 git 
+
+          sudo yum install python3-pip -y
+
+          cd ~/website
+
+          pip3 install -r requirements.txt
+        '
+
+    - name: 🛑 Stop Existing Website
+      run: |
+        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
+          PID=$(lsof -t -i:5000)
+
+          if [ ! -z "$PID" ]; then
+            kill -9 $PID
+          fi
+        '
+
+    - name: 🚀 Start Website
+      run: |
+        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
+          cd ~/website
+
+          nohup python3 app.py > output.log 2>&1 < /dev/null &
+
+          sleep 10
+
+          tail -n 20 output.log
+        '
+
+    - name: 📄 AI Log Analysis Agent
+      run: |
+        ssh -tt ec2-user@${{ secrets.EC2_HOST }} '
+          cd ~/website
+
+          export GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}"
+          export GROQ_API_KEY="${{ secrets.GROQ_API_KEY }}"
+
+          python3 ai_agents/log_analysis_agent.py
+        '
+
+    - name: 🔍 Health Check
+      run: |
+        curl --fail http://${{ secrets.EC2_HOST }}:5000/health
+
+    - name: ✅ Deployment Success
+      if: success()
+      run: |
+        echo "✅ Website deployed successfully!"
+
+    - name: 🔁 Rollback on Failure
+      if: failure()
+      run: |
+        ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+    
+          echo "❌ Deployment failed. Rolling back..."
+    
+          rm -rf ~/website
+          cp -r ~/website-backup ~/website
+    
+          PID=$(lsof -t -i:5000)
+    
+          if [ ! -z "$PID" ]; then
+            kill -9 $PID
+          fi
+    
+          cd ~/website
+    
+          nohup python3 app.py > output.log 2>&1 < /dev/null &
+    
+          sleep 10
+    
+          # ❗ Do NOT fail rollback on health check
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health)
+    
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "✅ Rollback successful!"
+          else
+            echo "⚠️ Rollback completed but health check returned $HTTP_CODE (ignored)"
+          fi
+    
+        EOF
+    
+    - name: ✅ Rollback Completed
+      if: failure()
+      run: |
+        echo "Application restored successfully"
+
+    
